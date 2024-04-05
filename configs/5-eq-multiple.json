@@ -1,0 +1,94 @@
+{
+    "node_a": [
+        {
+            "name": "Ab1",
+            "period": 100,
+            "dest_node": "node_b"
+        },
+        {
+            "name": "Ac1",
+            "period": 100,
+            "dest_node": "node_c"
+        },
+        {
+            "name": "Ad1",
+            "period": 100,
+            "dest_node": "node_d"
+        },
+        {
+            "name": "Ae1",
+            "period": 100,
+            "dest_node": "node_e"
+        },
+        {
+            "name": "Af1",
+            "period": 100,
+            "dest_node": "node_f"
+        }
+    ],
+    "node_b": [
+        {
+            "name": "B",
+            "period": 100,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "Bc",
+            "period": 100,
+            "dest_node": "node_b"
+        }
+    ],
+    "node_c": [
+        {
+            "name": "C",
+            "period": 100,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "Cb",
+            "period": 100,
+            "dest_node": "node_b"
+        }
+    ],
+    "node_d": [
+        {
+            "name": "D",
+            "period": 100,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "Db",
+            "period": 100,
+            "dest_node": "node_b"
+        }
+    ],
+    "node_e": [
+        {
+            "name": "E",
+            "period": 100,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "Ec",
+            "period": 100,
+            "dest_node": "node_c"
+        }
+    ],
+    "node_f": [
+        {
+            "name": "F",
+            "period": 100,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "Fe",
+            "period": 100,
+            "dest_node": "node_e"
+        },
+        {
+            "name": "Fd",
+            "period": 100,
+            "dest_node": "node_d"
+        }
+    ]
+}
