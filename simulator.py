@@ -464,10 +464,16 @@ def run(
     radio_aggregator_a = RadioAggregator()
     radio_aggregator_b = RadioAggregator()
     radio_aggregator_c = RadioAggregator()
+    radio_aggregator_d = RadioAggregator()
+    radio_aggregator_e = RadioAggregator()
+    radio_aggregator_f = RadioAggregator()
 
     node_a = Device("A", local_batching, recv_batching, min_or_max)
     node_b = Device("B", local_batching, recv_batching, min_or_max)
     node_c = Device("C", local_batching, recv_batching, min_or_max)
+    node_d = Device("D", local_batching, recv_batching, min_or_max)
+    node_e = Device("E", local_batching, recv_batching, min_or_max)
+    node_f = Device("F", local_batching, recv_batching, min_or_max)
 
     import json
 
@@ -483,6 +489,12 @@ def run(
             src_node = node_b
         elif node_name == "node_c":
             src_node = node_c
+        elif node_name == "node_d":
+            src_node = node_d
+        elif node_name == "node_e":
+            src_node = node_e
+        elif node_name == "node_f":
+            src_node = node_f
         else:
             raise ValueError(f"Unknown src node: {node_name}")
 
@@ -502,6 +514,12 @@ def run(
                 dst_node = node_b
             elif dest_node == "node_c":
                 dst_node = node_c
+            elif dest_node == "node_d":
+                dst_node = node_d
+            elif dest_node == "node_e":
+                dst_node = node_e
+            elif dest_node == "node_f":
+                dst_node = node_f
             else:
                 raise ValueError(f"Unknown dst node: {node_name}")
 
@@ -521,20 +539,32 @@ def run(
     radio_peer_a = Radio(node_a, radio_aggregator_a, network, radio_cooldown)
     radio_peer_b = Radio(node_b, radio_aggregator_b, network, radio_cooldown)
     radio_peer_c = Radio(node_c, radio_aggregator_c, network, radio_cooldown)
+    radio_peer_d = Radio(node_d, radio_aggregator_d, network, radio_cooldown)
+    radio_peer_e = Radio(node_e, radio_aggregator_e, network, radio_cooldown)
+    radio_peer_f = Radio(node_f, radio_aggregator_f, network, radio_cooldown)
 
     node_a.add_radio(radio_peer_a)
     node_b.add_radio(radio_peer_b)
     node_c.add_radio(radio_peer_c)
+    node_d.add_radio(radio_peer_d)
+    node_e.add_radio(radio_peer_e)
+    node_f.add_radio(radio_peer_f)
 
     stm = StateMachine()
     stm.add_network(network)
     stm.add_node(node_a)
     stm.add_node(node_b)
     stm.add_node(node_c)
+    stm.add_node(node_d)
+    stm.add_node(node_e)
+    stm.add_node(node_f)
 
     stm.add_radio(radio_peer_a)
     stm.add_radio(radio_peer_b)
     stm.add_radio(radio_peer_c)
+    stm.add_radio(radio_peer_d)
+    stm.add_radio(radio_peer_e)
+    stm.add_radio(radio_peer_f)
 
     for _ in range(steps):
         stm.update()
@@ -566,18 +596,39 @@ def run(
     print(
         f"Total radio time for device C: {get_radio_high_time(radio_aggregator_c)} or {get_radio_high_time(radio_aggregator_c) / time.current_time():.2%} of total time"
     )
+    print(
+        f"Total radio time for device D: {get_radio_high_time(radio_aggregator_d)} or {get_radio_high_time(radio_aggregator_d) / time.current_time():.2%} of total time"
+    )
+    print(
+        f"Total radio time for device E: {get_radio_high_time(radio_aggregator_e)} or {get_radio_high_time(radio_aggregator_e) / time.current_time():.2%} of total time"
+    )
+    print(
+        f"Total radio time for device F: {get_radio_high_time(radio_aggregator_f)} or {get_radio_high_time(radio_aggregator_f) / time.current_time():.2%} of total time"
+    )
 
     total = (
         get_radio_high_time(radio_aggregator_a)
         + get_radio_high_time(radio_aggregator_b)
         + get_radio_high_time(radio_aggregator_c)
+        + get_radio_high_time(radio_aggregator_d)
+        + get_radio_high_time(radio_aggregator_e)
+        + get_radio_high_time(radio_aggregator_f)
     )
 
     percentage_total = total / (
-        time.current_time() * 3
+        time.current_time() * 6
     )  # TODO: crude approximation, should be improved
     print(
         f"Total radio time accross all devices: {total} or {percentage_total:.2%} of total time"
     )
 
-    visualize([radio_aggregator_a, radio_aggregator_b, radio_aggregator_c])
+    visualize(
+        [
+            radio_aggregator_a,
+            radio_aggregator_b,
+            radio_aggregator_c,
+            radio_aggregator_d,
+            radio_aggregator_e,
+            radio_aggregator_f,
+        ]
+    ),
