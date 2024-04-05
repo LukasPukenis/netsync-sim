@@ -1,0 +1,48 @@
+
+{
+    "node_a": [
+        {
+            "name": "A1",
+            "period": 150,
+            "dest_node": "node_b"
+        },
+        {
+            "name": "A2",
+            "period": 80,
+            "dest_node": "node_b"
+        },
+        {
+            "name": "A3",
+            "period": 50,
+            "dest_node": "node_b"
+        },
+        {
+            "name": "A4",
+            "period": 60,
+            "dest_node": "node_b"
+        }
+        
+    ],
+    "node_b": [
+        {
+            "name": "B1",
+            "period": 150,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "B2",
+            "period": 80,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "B3",
+            "period": 50,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "B4",
+            "period": 60,
+            "dest_node": "node_a"
+        }
+    ]
+}

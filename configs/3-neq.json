@@ -1,0 +1,99 @@
+
+{
+    "node_a": [
+        {
+            "name": "Ab1",
+            "period": 120,
+            "dest_node": "node_b"
+        },
+        {
+            "name": "Ab2",
+            "period": 80,
+            "dest_node": "node_b"
+        },
+        {
+            "name": "Ab3",
+            "period": 40,
+            "dest_node": "node_b"
+        },
+        {
+            "name": "Ac1",
+            "period": 120,
+            "dest_node": "node_c"
+        },
+        {
+            "name": "Ac2",
+            "period": 80,
+            "dest_node": "node_c"
+        },
+        {
+            "name": "Ac3",
+            "period": 40,
+            "dest_node": "node_c"
+        }
+    ],
+    "node_b": [
+        {
+            "name": "Ba1",
+            "period": 120,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "Ba2",
+            "period": 80,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "Ba3",
+            "period": 40,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "Bc1",
+            "period": 120,
+            "dest_node": "node_c"
+        },
+        {
+            "name": "Bc2",
+            "period": 80,
+            "dest_node": "node_c"
+        },
+        {
+            "name": "Bc3",
+            "period": 40,
+            "dest_node": "node_c"
+        }
+    ],
+    "node_c": [
+        {
+            "name": "Ca1",
+            "period": 120,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "Ca2",
+            "period": 80,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "Ca3",
+            "period": 40,
+            "dest_node": "node_a"
+        },
+        {
+            "name": "Cb1",
+            "period": 120,
+            "dest_node": "node_b"
+        },
+        {
+            "name": "Cb2",
+            "period": 80,
+            "dest_node": "node_b"
+        },
+        {
+            "name": "Cb3",
+            "period": 40,
+            "dest_node": "node_b"
+        }
+    ]
+}
