@@ -201,7 +201,7 @@ class Device:
                 if signal.can_emit_at(curr_time):
                     signals_to_emit.append(signal)
 
-            min_time = 0
+            min_time = -9999999  # TODO HERE WAS A BUG!!!
             max_time = 999999
 
             # it's not worth emitting this event if the batch is small or else we lose all the beenfit
