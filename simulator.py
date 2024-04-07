@@ -5,14 +5,11 @@ from typing import List, TypedDict
 import matplotlib.pyplot as plt
 import numpy as np
 
-TOTAL_SIMULATION_TIME = 20000
-batch = True
 RAND_SEED = 42
 
 # TODO move outside to interactive sliders
-MIN_SIGNAL_TS = 0
-MAX_SIGNAL_TS = 1000
-
+MIN_SIGNAL_TS = 400
+MAX_SIGNAL_TS = 1600
 # TODO: constants above could go into the notebook
 
 
@@ -49,10 +46,10 @@ class RadioAggregator:
         return f"RadioAggregator: {self.events} {self.states}"
 
 
+# TODO: there are limitations in that all numbers are in seconds(assumed amounts). We should multiply everything by 1000 to simulate milliseconds, or at least 10-100
 class Time:
     def __init__(self):
-        # non-zero to simplify the example as we don't need to check against zero
-        self._curr_time = 0
+        self.reset()
 
     def current_time(self) -> int:
         return self._curr_time
@@ -61,7 +58,8 @@ class Time:
         self._curr_time += 1
 
     def reset(self):
-        self._curr_time = 0
+        # TODO nonzero to simplify the example as we don't need to check against zero
+        self._curr_time = 1
 
     def __repr__(self):
         return f"Time: {self._curr_time}"
@@ -70,28 +68,16 @@ class Time:
 time = Time()
 
 
-class EmitTime:
-    def __init__(self, start: int, end: int):
-        self.premature_time = start
-        self.desired_time = end
-
-        assert self.premature_time < self.desired_time
-
-    def includes(self, time: int) -> bool:
-        return self.premature_time <= time <= self.desired_time
-
-    def __repr__(self):
-        return f"EmitTime: {self.premature_time}, {self.desired_time}"
-
-
 class IncomingSignal:
     def __init__(self, name: str, received_time_ts: int, src_node: "Device"):
-        self.name = name
-        self.received_time_ts = received_time_ts
+        self._name = name
+        self._received_time_ts = received_time_ts
         self._src_node = src_node
 
     def __repr__(self):
-        return f"IncomingSignal: {self.name}, {self.received_time_ts}, {self._src_node}"
+        return (
+            f"IncomingSignal: {self._name}, {self._received_time_ts}, {self._src_node}"
+        )
 
 
 class Signal:
@@ -104,142 +90,127 @@ class Signal:
         src_node=None,
         batch: bool = False,
     ):
-        self.src_node = src_node
-        self.name = name
-        self.period = period
-        self.delta = delta
-        self.dest_node = dest_node
-        self.last_emit_time: typing.Optional[int] = None
-        self.batch = batch
+        self._first_emit = True
+        self._src_node = src_node
+        self._name = name
+        self._period = period
+        self._delta = delta
+        self._dest_node = dest_node
+        self._batch = batch
 
         # signal might not be initiated immediately, so immitate some delay to misalign
-        t = time.current_time() + random.randint(MIN_SIGNAL_TS, MAX_SIGNAL_TS)
-        self.emit_zone = EmitTime(t - delta, t)
-
-    def post_emit(self, time: int) -> None:
-        new_time = time + self.period
-        self.emit_zone = EmitTime(
-            new_time - self.delta,
-            new_time,
+        self._emit_time = time.current_time() + random.randint(
+            MIN_SIGNAL_TS, MAX_SIGNAL_TS
         )
-        self.last_emit_time = time
+
+    def get_dest_node_name(self) -> str:
+        return self._dest_node.get_name()
+
+    def post_emit(self, time: int, gcd: int) -> None:
+        if self._first_emit:
+            self._emit_time = time + gcd
+            self._first_emit = False
+        else:
+            self._emit_time = time + self._period
 
     def can_emit_at(self, time: int) -> bool:
-        return self.emit_zone.includes(time)
+        return self._emit_time == time
 
     def convert_to_incoming(self) -> IncomingSignal:
-        assert self.src_node is not None
-        return IncomingSignal(self.name, time.current_time(), self.src_node)
+        assert self._src_node is not None
+        return IncomingSignal(self._name, time.current_time(), self._src_node)
 
     def __repr__(self):
-        return f"Signal: {self.name}, {self.period}, {self.delta}, {self.emit_zone} {self.dest_node}"
+        return f"Signal: {self._name}, {self._period}, {self._delta}, {self._emit_time} {self._dest_node}"
 
 
 class Device:
-    def __init__(
-        self, name: str, local_batching: bool, recv_batching: bool, min_or_max: str
-    ):
-        self.name = name
-        self.radio: typing.Optional[Radio] = None
-        self.outgoing_signals: typing.Optional[list[Signal]] = None
+    def __init__(self, name: str, local_batching: bool, recv_batching: bool):
+        self._name = name
+        self._radio: typing.Optional[Radio] = None
+        self._outgoing_signals: typing.Optional[list[Signal]] = None
 
         self._local_batching = local_batching
         self._recv_batching = recv_batching
 
-        self._min_or_max = min_or_max
-        self._peer_last_received = {}
+        self._peer_last_received: typing.Dict[str, bool] = {}
+
+    def get_name(self) -> str:
+        return self._name
 
     def add_radio(self, radio) -> None:
-        assert self.radio is None
+        assert self._radio is None
 
-        self.radio = radio
+        self._radio = radio
 
     def add_outgoing_signals(self, signals: list[Signal]) -> None:
-        self.outgoing_signals = signals
+        self._outgoing_signals = signals
 
     def receive(self, signal: IncomingSignal) -> None:
-        assert self.radio is not None
+        assert self._radio is not None
 
-        self._peer_last_received[signal._src_node.name] = True
+        self._peer_last_received[signal._src_node._name] = True
 
-    def emit(self, signal: Signal) -> None:
-        signal.post_emit(time.current_time())
+    def emit(self, signal: Signal, gcd: int) -> None:
+        signal.post_emit(time.current_time(), gcd)
 
-        assert self.radio is not None
-        self.radio.emit(signal)
+        assert self._radio is not None
+        self._radio.emit(signal)
 
-        self._peer_last_received[signal.dest_node.name] = False
+        self._peer_last_received[signal.get_dest_node_name()] = False
 
     def update(self) -> None:
-        if self.outgoing_signals is None:
+        if self._outgoing_signals is None:
             return
 
-        assert self.radio
+        assert self._radio
         curr_time = time.current_time()
+        gcd = min([signal._period for signal in self._outgoing_signals])
 
         if self._recv_batching:
             # when receive batching is enabled, it means this is a good opportunity
-            # to emit data towards the peer from which data came
-            # TODO: can't really get this one to work properly, it produces worse results than local batching for some reason
-            # though by reasoning it should not. I tried having minimum cooldown period but that doesn't help either
-            for signal in self.outgoing_signals:
+            # to emit data towards the peer from which data came. There's a high chance
+            # that peers radio is hot however we're very sure our is hot so it makes sense to use that.
+            # this assumes that the cost of sending data when radio is hot is insignificant
+            for signal in self._outgoing_signals:
                 if (
-                    signal.dest_node.name in self._peer_last_received
-                    and self._peer_last_received[signal.dest_node.name]
+                    signal._dest_node.name in self._peer_last_received
+                    and self._peer_last_received[signal._dest_node.name]
                 ):
-                    for signal in self.outgoing_signals:
-                        if (
-                            signal.emit_zone.premature_time + (signal.period // 2)
-                            <= curr_time
-                            <= signal.emit_zone.desired_time
-                        ):
-                            self.emit(signal)
+                    pass
+                    # TODO
 
-        if self._local_batching:
-            signals_to_emit = []
-            for signal in self.outgoing_signals:
-                if signal.can_emit_at(curr_time):
-                    signals_to_emit.append(signal)
-
-            min_time = -9999999  # TODO HERE WAS A BUG!!!
-            max_time = 999999
-
-            # it's not worth emitting this event if the batch is small or else we lose all the beenfit
-            # we can't really check if all signals align as that's unrealistic in case the periods are all not equal
-            if len(signals_to_emit) > 1:
-                # calculate best slice of time
-                for signal in signals_to_emit:
-                    min_time = max(min_time, signal.emit_zone.premature_time)
-                    max_time = min(max_time, signal.emit_zone.desired_time)
-
-                if self._min_or_max == "avg":
-                    target_time = (min_time + max_time) // 2
-                elif self._min_or_max == "min":
-                    target_time = min_time
-                elif self._min_or_max == "max":
-                    target_time = max_time
-                else:
-                    raise ValueError(f"Unknown min_or_max: {self._min_or_max}")
-
-                if curr_time == target_time:
-                    for signal in signals_to_emit:
-                        self.emit(signal)
+        elif self._local_batching:
+            # the idea behind gcd is to find lowest common interval and align on that.
+            # this assumes that all signals are sharing a common period or else
+            # this doesn't work.
+            # Signal must hold state if it was already emitted or not. Because we are
+            # guaranteed that all periods are multiplier of gcd, we can just wait until
+            # alignment time and simply emit the signal. This will guarantee that this signal
+            # is immediately aligned with all other signals.
+            # Afterwards once the signal is marked as emitted first time, we can proceed as usual
+            # and perform regular emission based on the period of the signal so it will naturally
+            # be emitted on it's gcd*N time.
+            gcd = min([signal._period for signal in self._outgoing_signals])
+            for signal in self._outgoing_signals:
+                if curr_time % gcd == 0 and signal._first_emit:
+                    self.emit(signal, gcd)
 
         # make sure we emit on hard deadline of a signal
         # this is crucial to call at the very end to guarantee emission of events
-        for signal in self.outgoing_signals:
-            if signal.emit_zone.desired_time == curr_time:
-                self.emit(signal)
+        for signal in self._outgoing_signals:
+            if signal.can_emit_at(curr_time):
+                self.emit(signal, gcd)
 
     def __repr__(self):
-        return f"Device: {self.name}"
+        return f"Device: {self._name}"
 
 
 class Network:  #
     def __init__(self, latency: tuple[int, int]):
         assert latency[0] < latency[1]
 
-        self.latency = latency
+        self._latency = latency
 
         # ingress queue is used to simulate the sending of packets. packet is stored with timestamp and then sent to the deveice once the time arrives
         self.ingress_queue: typing.List[
@@ -249,10 +220,16 @@ class Network:  #
     def set_latency(self, latency: tuple[int, int]) -> None:
         assert latency[0] > latency[1]
 
-        self.latency = latency
+        self._latency = latency
 
     def send(self, dest_node: Device, signal: Signal) -> None:
-        lat = np.random.randint(self.latency[0], self.latency[1] + 1)
+        lat = np.random.randint(self._latency[0], self._latency[1] + 1)
+
+        # Simulate occasional hiccups TODO, move those to the interactive panel
+        if time.current_time() % 300 < 20:
+            # add random value between 10 and 20 to lat
+            lat += np.random.randint(10, 20)
+
         self.ingress_queue.append(
             (int(time.current_time() + lat), (dest_node, signal.convert_to_incoming()))
         )
@@ -260,9 +237,9 @@ class Network:  #
     def update(self) -> None:
         for t, (dest_node, signal) in self.ingress_queue.copy():
             if t == time.current_time():
-                assert dest_node.radio
+                assert dest_node._radio
                 # TODO: can this be simulated nicer?
-                dest_node.radio.receive(signal)
+                dest_node._radio.receive(signal)
                 self.ingress_queue.remove((t, (dest_node, signal)))
 
 
@@ -278,44 +255,44 @@ class Radio:
     def __init__(
         self, node: Device, aggregator: RadioAggregator, network: Network, cooldown: int
     ):
-        self.state = RadioState.Low
-        self.network = network
+        self._state = RadioState.Low
+        self._network = network
         self._cooldown = cooldown
-        self.state_change_countdown = cooldown
-        self.node = node
-        self.aggregator = aggregator
-        self.aggregator.add_radio_state(self.state, time.current_time())
+        self._state_change_countdown = cooldown
+        self._node = node
+        self._aggregator = aggregator
+        self._aggregator.add_radio_state(self._state, time.current_time())
 
     def _set_to_high(self) -> None:
-        self.state = RadioState.High
-        self.aggregator.add_radio_state(self.state, time.current_time())
-        self.state_change_countdown = self._cooldown
+        self._state = RadioState.High
+        self._aggregator.add_radio_state(self._state, time.current_time())
+        self._state_change_countdown = self._cooldown
 
     def receive(self, signal: IncomingSignal) -> None:
         self._set_to_high()
-        self.aggregator.add_event(
-            RadioEvent(time.current_time(), signal.name, RadioEventDirection.Incoming)
+        self._aggregator.add_event(
+            RadioEvent(time.current_time(), signal._name, RadioEventDirection.Incoming)
         )
-        self.node.receive(signal)
+        self._node.receive(signal)
 
     def emit(self, signal: Signal) -> None:
         self._set_to_high()
-        self.aggregator.add_event(
-            RadioEvent(time.current_time(), signal.name, RadioEventDirection.Outgoing)
+        self._aggregator.add_event(
+            RadioEvent(time.current_time(), signal._name, RadioEventDirection.Outgoing)
         )
 
-        self.network.send(signal.dest_node, signal)
+        self._network.send(signal._dest_node, signal)
 
     def update(self) -> None:
-        if self.state == RadioState.High:
-            if self.state_change_countdown > 0:
-                self.state_change_countdown -= 1
+        if self._state == RadioState.High:
+            if self._state_change_countdown > 0:
+                self._state_change_countdown -= 1
             else:
-                self.state = RadioState.Low
-                self.aggregator.add_radio_state(self.state, time.current_time())
+                self._state = RadioState.Low
+                self._aggregator.add_radio_state(self._state, time.current_time())
 
     def __repr__(self):
-        return f"Radio: {self.state}, {self.state_change_countdown}"
+        return f"Radio: {self._state}, {self._state_change_countdown}"
 
 
 class StateInfo(TypedDict):
@@ -326,26 +303,26 @@ class StateInfo(TypedDict):
 
 class StateMachine:
     def __init__(self):
-        self.network = None
-        self.nodes = []
-        self.radios = []
+        self._network = None
+        self._nodes = []
+        self._radios = []
 
     def add_network(self, network: Network) -> None:
-        self.network = network
+        self._network = network
 
     def add_node(self, node: Device) -> None:
-        self.nodes.append(node)
+        self._nodes.append(node)
 
     def add_radio(self, radio: Radio) -> None:
-        self.radios.append(radio)
+        self._radios.append(radio)
 
     def update(self) -> None:
-        self.network.update()
+        self._network.update()
 
-        for node in self.nodes:
+        for node in self._nodes:
             node.update()
 
-        for radio in self.radios:
+        for radio in self._radios:
             radio.update()
 
         time.advance_time()
@@ -354,8 +331,8 @@ class StateMachine:
     def state(self) -> StateInfo:
         return {
             "time": time.current_time(),
-            "nodes": self.nodes,
-            "radios": self.radios,
+            "nodes": self._nodes,
+            "radios": self._radios,
         }
 
 
@@ -449,14 +426,13 @@ def _reset():
 
 
 def run(
-    signals: str,
+    signals_cfg: str,
     steps: int,
     network_lat_min: int,
     network_lat_max: int,
     radio_cooldown: int,
     local_batching: bool,
     recv_batching: bool,
-    min_or_max: str,
 ):
     _reset()
     network = Network((network_lat_min, network_lat_max))  # ping latency
@@ -468,16 +444,17 @@ def run(
     radio_aggregator_e = RadioAggregator()
     radio_aggregator_f = RadioAggregator()
 
-    node_a = Device("A", local_batching, recv_batching, min_or_max)
-    node_b = Device("B", local_batching, recv_batching, min_or_max)
-    node_c = Device("C", local_batching, recv_batching, min_or_max)
-    node_d = Device("D", local_batching, recv_batching, min_or_max)
-    node_e = Device("E", local_batching, recv_batching, min_or_max)
-    node_f = Device("F", local_batching, recv_batching, min_or_max)
+    node_a = Device("A", local_batching, recv_batching)
+    node_b = Device("B", local_batching, recv_batching)
+    node_c = Device("C", local_batching, recv_batching)
+    node_d = Device("D", local_batching, recv_batching)
+    node_e = Device("E", local_batching, recv_batching)
+    node_f = Device("F", local_batching, recv_batching)
 
     import json
 
-    signals: typing.Dict[str, typing.List[typing.Any]] = json.loads(signals)
+    signals: typing.Dict[str, typing.List[typing.Any]]
+    signals = json.loads(signals_cfg)
 
     # TODO: yikes, this is ugly, but it works. This also has 3 nodes hardcoded, should be plenty for playing around
     for node_name in signals:
@@ -502,7 +479,9 @@ def run(
         for data in signals[node_name]:
             name = data["name"]
             period = int(data["period"])
-            delta = period  # TODO
+            delta = (
+                period * 1
+            )  # TODO, what the hell, doing this and selecting `min` makes it work for all of the cases even better
 
             dest_node = data["dest_node"]
             batch: bool = data.get("batch", False)
