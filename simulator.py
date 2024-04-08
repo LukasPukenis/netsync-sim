@@ -85,7 +85,6 @@ class Signal:
         self,
         name: str,
         period: int,
-        delta: int,
         dest_node=None,
         src_node=None,
         batch: bool = False,
@@ -94,7 +93,6 @@ class Signal:
         self._src_node = src_node
         self._name = name
         self._period = period
-        self._delta = delta
         self._dest_node = dest_node
         self._batch = batch
 
@@ -121,7 +119,9 @@ class Signal:
         return IncomingSignal(self._name, time.current_time(), self._src_node)
 
     def __repr__(self):
-        return f"Signal: {self._name}, {self._period}, {self._delta}, {self._emit_time} {self._dest_node}"
+        return (
+            f"Signal: {self._name}, {self._period}, {self._emit_time} {self._dest_node}"
+        )
 
 
 class Device:
@@ -479,9 +479,6 @@ def run(
         for data in signals[node_name]:
             name = data["name"]
             period = int(data["period"])
-            delta = (
-                period * 1
-            )  # TODO, what the hell, doing this and selecting `min` makes it work for all of the cases even better
 
             dest_node = data["dest_node"]
             batch: bool = data.get("batch", False)
@@ -506,7 +503,6 @@ def run(
                 Signal(
                     name,
                     period=period,
-                    delta=delta,
                     dest_node=dst_node,
                     batch=batch,
                     src_node=src_node,
