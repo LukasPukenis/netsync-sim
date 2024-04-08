@@ -231,11 +231,6 @@ class Network:  #
     def send(self, dest_node: Device, signal: Signal) -> None:
         lat = np.random.randint(self._latency[0], self._latency[1] + 1)
 
-        # Simulate occasional hiccups TODO, move those to the interactive panel
-        if time.current_time() % 300 < 20:
-            # add random value between 10 and 20 to lat
-            lat += np.random.randint(10, 20)
-
         self.ingress_queue.append(
             (int(time.current_time() + lat), (dest_node, signal.convert_to_incoming()))
         )
