@@ -574,40 +574,30 @@ def run(
 
         return total_radio_high_time
 
-    print(
-        f"Total radio time for device A: {get_radio_high_time(radio_aggregator_a)} or {get_radio_high_time(radio_aggregator_a) / time.current_time():.2%} of total time"
-    )
-    print(
-        f"Total radio time for device B: {get_radio_high_time(radio_aggregator_b)} or {get_radio_high_time(radio_aggregator_b) / time.current_time():.2%} of total time"
-    )
-    print(
-        f"Total radio time for device C: {get_radio_high_time(radio_aggregator_c)} or {get_radio_high_time(radio_aggregator_c) / time.current_time():.2%} of total time"
-    )
-    print(
-        f"Total radio time for device D: {get_radio_high_time(radio_aggregator_d)} or {get_radio_high_time(radio_aggregator_d) / time.current_time():.2%} of total time"
-    )
-    print(
-        f"Total radio time for device E: {get_radio_high_time(radio_aggregator_e)} or {get_radio_high_time(radio_aggregator_e) / time.current_time():.2%} of total time"
-    )
-    print(
-        f"Total radio time for device F: {get_radio_high_time(radio_aggregator_f)} or {get_radio_high_time(radio_aggregator_f) / time.current_time():.2%} of total time"
-    )
-
-    total = (
-        get_radio_high_time(radio_aggregator_a)
-        + get_radio_high_time(radio_aggregator_b)
-        + get_radio_high_time(radio_aggregator_c)
-        + get_radio_high_time(radio_aggregator_d)
-        + get_radio_high_time(radio_aggregator_e)
-        + get_radio_high_time(radio_aggregator_f)
-    )
-
-    percentage_total = total / (
-        time.current_time() * 6
-    )  # TODO: crude approximation, should be improved
-    print(
-        f"Total radio time accross all devices: {total} or {percentage_total:.2%} of total time"
-    )
+    if radio_aggregator_a.events:
+        print(
+            f"Total radio time for device A: {get_radio_high_time(radio_aggregator_a)} or {get_radio_high_time(radio_aggregator_a) / time.current_time():.2%} of total time"
+        )
+    if radio_aggregator_b.events:
+        print(
+            f"Total radio time for device B: {get_radio_high_time(radio_aggregator_b)} or {get_radio_high_time(radio_aggregator_b) / time.current_time():.2%} of total time"
+        )
+    if radio_aggregator_c.events:
+        print(
+            f"Total radio time for device C: {get_radio_high_time(radio_aggregator_c)} or {get_radio_high_time(radio_aggregator_c) / time.current_time():.2%} of total time"
+        )
+    if radio_aggregator_d.events:
+        print(
+            f"Total radio time for device D: {get_radio_high_time(radio_aggregator_d)} or {get_radio_high_time(radio_aggregator_d) / time.current_time():.2%} of total time"
+        )
+    if radio_aggregator_e.events:
+        print(
+            f"Total radio time for device E: {get_radio_high_time(radio_aggregator_e)} or {get_radio_high_time(radio_aggregator_e) / time.current_time():.2%} of total time"
+        )
+    if radio_aggregator_f.events:
+        print(
+            f"Total radio time for device F: {get_radio_high_time(radio_aggregator_f)} or {get_radio_high_time(radio_aggregator_f) / time.current_time():.2%} of total time"
+        )
 
     visualize(
         [
