@@ -32,9 +32,13 @@ class RadioEvent:
 
 
 class RadioAggregator:
-    def __init__(self):
-        self.events = []
-        self.states = []
+    def __init__(self, name: str):
+        self.events: typing.List[RadioEvent] = []
+        self.states: typing.List[typing.Tuple[int, int]] = []
+        self._name = name
+
+    def get_name(self) -> str:
+        return self._name
 
     def add_radio_state(self, radio_state: int, time: int) -> None:
         self.states.append((time, radio_state))
@@ -43,7 +47,7 @@ class RadioAggregator:
         self.events.append(event)
 
     def __repr__(self):
-        return f"RadioAggregator: {self.events} {self.states}"
+        return f"RadioAggregator: {self.events} {self.states} {self._name}"
 
 
 # TODO: there are limitations in that all numbers are in seconds(assumed amounts). We should multiply everything by 1000 to simulate milliseconds, or at least 10-100
@@ -338,9 +342,14 @@ class StateMachine:
         }
 
 
-def visualize(aggregators):
+@typing.no_type_check
+def visualize(aggregators: typing.List[RadioAggregator]):
+
+    # filter empty aggregators
+    aggregators = [a for a in aggregators if len(a.events) > 0]
+
     num_aggregators = len(aggregators)
-    fig, axes = plt.subplots(num_aggregators, 1, figsize=(10, 2 * num_aggregators))
+    fig, axes = plt.subplots(num_aggregators, 1, figsize=(10, 3 * num_aggregators))
 
     # If there's only one aggregator, wrap axes in a list for consistent handling
     if num_aggregators == 1:
@@ -404,7 +413,7 @@ def visualize(aggregators):
         # Plot RadioStates
         state_times = [time for time, _ in states]
         state_values = [
-            state - 1.5 for _, state in states
+            state - 0.5 for _, state in states
         ]  # Adjust y-level for visibility
         ax.step(
             state_times, state_values, where="post", label="Radio States", color="green"
@@ -414,7 +423,8 @@ def visualize(aggregators):
         ax.set_xlabel("Time")
         ax.set_yticks(range(len(unique_names) + 1))
         ax.set_yticklabels(["Radio States"] + unique_names)
-        ax.set_title("Device")
+        ax.set_title(f"Device {radio_aggregator.get_name()}")
+
         ax.legend()
 
     plt.tight_layout()
@@ -439,12 +449,12 @@ def run(
     _reset()
     network = Network((network_lat_min, network_lat_max))  # ping latency
 
-    radio_aggregator_a = RadioAggregator()
-    radio_aggregator_b = RadioAggregator()
-    radio_aggregator_c = RadioAggregator()
-    radio_aggregator_d = RadioAggregator()
-    radio_aggregator_e = RadioAggregator()
-    radio_aggregator_f = RadioAggregator()
+    radio_aggregator_a = RadioAggregator("A")
+    radio_aggregator_b = RadioAggregator("B")
+    radio_aggregator_c = RadioAggregator("C")
+    radio_aggregator_d = RadioAggregator("D")
+    radio_aggregator_e = RadioAggregator("E")
+    radio_aggregator_f = RadioAggregator("F")
 
     node_a = Device("A", local_batching, recv_batching)
     node_b = Device("B", local_batching, recv_batching)
