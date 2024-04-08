@@ -104,10 +104,10 @@ class Signal:
     def get_dest_node_name(self) -> str:
         return self._dest_node.get_name()
 
-    def post_emit(self, time: int, gcd: int) -> None:
+    def post_emit(self, time: int, gcd: int, premature: bool) -> None:
         assert time <= self._emit_time
 
-        if self._first_emit:
+        if self._first_emit and premature:
             self._emit_time = time + gcd
             self._first_emit = False
         else:
@@ -153,8 +153,8 @@ class Device:
 
         self._peer_last_received[signal._src_node._name] = True
 
-    def emit(self, signal: Signal, gcd: int) -> None:
-        signal.post_emit(time.current_time(), gcd)
+    def emit(self, signal: Signal, gcd: int, premature: bool) -> None:
+        signal.post_emit(time.current_time(), gcd, premature)
 
         assert self._radio is not None
         self._radio.emit(signal)
@@ -196,13 +196,13 @@ class Device:
             gcd = min([signal._period for signal in self._outgoing_signals])
             for signal in self._outgoing_signals:
                 if curr_time % gcd == 0 and signal._first_emit:
-                    self.emit(signal, gcd)
+                    self.emit(signal, gcd, True)
 
         # make sure we emit on hard deadline of a signal
         # this is crucial to call at the very end to guarantee emission of events
         for signal in self._outgoing_signals:
             if signal.can_emit_at(curr_time):
-                self.emit(signal, gcd)
+                self.emit(signal, gcd, False)
 
     def __repr__(self):
         return f"Device: {self._name}"
