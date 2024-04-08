@@ -105,6 +105,8 @@ class Signal:
         return self._dest_node.get_name()
 
     def post_emit(self, time: int, gcd: int) -> None:
+        assert time <= self._emit_time
+
         if self._first_emit:
             self._emit_time = time + gcd
             self._first_emit = False
