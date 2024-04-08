@@ -1,0 +1,10 @@
+# Intro
+This is a crude network simulator in order to observe how batching could help improve battery life.
+It draws on assumptions that emitting more data at once is more optimal than emitting less data
+throrough the time.
+
+# limitations
+- [] Time is simulated assuming seconds. This means emulator can't emulate latency properly
+as it's in milliseconds. Multiplying values by 1,000 introduces speed issues.
+- [] On-Receive batching does not function well.
+- [] No ability to postpone signal creation at a later time to show the effects of autocalibration.
