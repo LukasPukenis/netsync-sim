@@ -8,8 +8,8 @@ import numpy as np
 RAND_SEED = 42
 
 # TODO move outside to interactive sliders
-MIN_SIGNAL_TS = 400
-MAX_SIGNAL_TS = 1600
+MIN_SIGNAL_TS = 40
+MAX_SIGNAL_TS = 160
 # TODO: constants above could go into the notebook
 
 
