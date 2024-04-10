@@ -189,9 +189,13 @@ class Device:
                     signal._dest_node._name in self._peer_last_received
                     and self._peer_last_received[signal._dest_node._name]
                 ):
-                    if signal._emit_time - (signal._period / 2) <= curr_time:
-                        # signal._emit_time = curr_time
-                        self.emit(signal, gcd, False)
+                    # TODO: here is the batching on receive logic, however it doesn't work as expected
+                    # the more the the K is increased, the more batches it does, meaning worse battery life.
+                    # The smaller it is, the more it aligns with signal._emit_time and makes no difference
+                    # than a regular local batching
+                    K = 10
+                    if signal._emit_time - K <= curr_time:
+                        signal._emit_time = curr_time
 
         if self._local_batching:
             # the idea behind gcd is to find lowest common interval and align on that.
