@@ -180,13 +180,14 @@ class Device:
             # this assumes that the cost of sending data when radio is hot is insignificant
             for signal in self._outgoing_signals:
                 if (
-                    signal._dest_node.name in self._peer_last_received
-                    and self._peer_last_received[signal._dest_node.name]
+                    signal._dest_node._name in self._peer_last_received
+                    and self._peer_last_received[signal._dest_node._name]
                 ):
-                    pass
-                    # TODO
+                    if signal._emit_time - (signal._period / 2) <= curr_time:
+                        # signal._emit_time = curr_time
+                        self.emit(signal, gcd, False)
 
-        elif self._local_batching:
+        if self._local_batching:
             # the idea behind gcd is to find lowest common interval and align on that.
             # this assumes that all signals are sharing a common period or else
             # this doesn't work.
