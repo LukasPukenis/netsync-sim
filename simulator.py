@@ -12,6 +12,12 @@ MIN_SIGNAL_TS = 40
 MAX_SIGNAL_TS = 160
 # TODO: constants above could go into the notebook
 
+# IN order to simulate in milliseconds(so it would make sense in terms of latency for example)
+# we should simulate everything in millisecond precision, which means that if we simulate radio state for 15seconds
+# with millisecond precision this becomes 15,000 steps. This doesn't scale well as the simulation takes
+# a lot of time to complete. However we don't need precision but just general view of the system.
+# Setting this variable to 1000 will simulate millisecond precision.
+TIME_MULTIPLIER = 10
 
 class RadioEventDirection:
     Incoming = 0
@@ -445,6 +451,11 @@ def run(
     local_batching: bool,
     recv_batching: bool,
 ):
+    steps *= TIME_MULTIPLIER
+    network_lat_min *= TIME_MULTIPLIER
+    network_lat_max *= TIME_MULTIPLIER
+    radio_cooldown *= TIME_MULTIPLIER
+    
     _reset()
     network = Network((network_lat_min, network_lat_max))  # ping latency
 
@@ -513,7 +524,7 @@ def run(
             signals_to_add.append(
                 Signal(
                     name,
-                    period=period,
+                    period=period * TIME_MULTIPLIER,
                     dest_node=dst_node,
                     batch=batch,
                     src_node=src_node,
@@ -575,27 +586,27 @@ def run(
 
     if radio_aggregator_a.events:
         print(
-            f"Total radio time for device A: {get_radio_high_time(radio_aggregator_a)} or {get_radio_high_time(radio_aggregator_a) / time.current_time():.2%} of total time"
+            f"Total radio time for device A: {get_radio_high_time(radio_aggregator_a)} or {get_radio_high_time(radio_aggregator_a) /  time.current_time():.2%} of total time"
         )
     if radio_aggregator_b.events:
         print(
-            f"Total radio time for device B: {get_radio_high_time(radio_aggregator_b)} or {get_radio_high_time(radio_aggregator_b) / time.current_time():.2%} of total time"
+            f"Total radio time for device B: {get_radio_high_time(radio_aggregator_b)} or {get_radio_high_time(radio_aggregator_b) /  time.current_time():.2%} of total time"
         )
     if radio_aggregator_c.events:
         print(
-            f"Total radio time for device C: {get_radio_high_time(radio_aggregator_c)} or {get_radio_high_time(radio_aggregator_c) / time.current_time():.2%} of total time"
+            f"Total radio time for device C: {get_radio_high_time(radio_aggregator_c)} or {get_radio_high_time(radio_aggregator_c) /  time.current_time():.2%} of total time"
         )
     if radio_aggregator_d.events:
         print(
-            f"Total radio time for device D: {get_radio_high_time(radio_aggregator_d)} or {get_radio_high_time(radio_aggregator_d) / time.current_time():.2%} of total time"
+            f"Total radio time for device D: {get_radio_high_time(radio_aggregator_d)} or {get_radio_high_time(radio_aggregator_d) /  time.current_time():.2%} of total time"
         )
     if radio_aggregator_e.events:
         print(
-            f"Total radio time for device E: {get_radio_high_time(radio_aggregator_e)} or {get_radio_high_time(radio_aggregator_e) / time.current_time():.2%} of total time"
+            f"Total radio time for device E: {get_radio_high_time(radio_aggregator_e)} or {get_radio_high_time(radio_aggregator_e) /  time.current_time():.2%} of total time"
         )
     if radio_aggregator_f.events:
         print(
-            f"Total radio time for device F: {get_radio_high_time(radio_aggregator_f)} or {get_radio_high_time(radio_aggregator_f) / time.current_time():.2%} of total time"
+            f"Total radio time for device F: {get_radio_high_time(radio_aggregator_f)} or {get_radio_high_time(radio_aggregator_f) /  time.current_time():.2%} of total time"
         )
 
     visualize(
