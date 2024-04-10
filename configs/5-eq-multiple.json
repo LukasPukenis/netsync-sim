@@ -35,7 +35,7 @@
         {
             "name": "Bc",
             "period": 100,
-            "dest_node": "node_b"
+            "dest_node": "node_a"
         }
     ],
     "node_c": [
