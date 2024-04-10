@@ -319,6 +319,8 @@ class StateMachine:
         self._radios.append(radio)
 
     def update(self) -> None:
+        time.advance_time()
+
         self._network.update()
 
         for node in self._nodes:
@@ -327,7 +329,8 @@ class StateMachine:
         for radio in self._radios:
             radio.update()
 
-        time.advance_time()
+        self._network.update()
+        
 
     # return all of the state
     def state(self) -> StateInfo:
