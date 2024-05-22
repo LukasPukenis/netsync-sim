@@ -1,3 +1,4 @@
+from operator import index
 import random
 import typing
 from typing import List, TypedDict
@@ -8,16 +9,13 @@ import numpy as np
 RAND_SEED = 42
 
 # TODO move outside to interactive sliders
-MIN_SIGNAL_TS = 40
-MAX_SIGNAL_TS = 160
+MIN_INITIAL_SIGNAL_TS = 0
+MAX_INITIAL_SIGNAL_TS = 4000
 # TODO: constants above could go into the notebook
 
-# IN order to simulate in milliseconds(so it would make sense in terms of latency for example)
-# we should simulate everything in millisecond precision, which means that if we simulate radio state for 15seconds
-# with millisecond precision this becomes 15,000 steps. This doesn't scale well as the simulation takes
-# a lot of time to complete. However we don't need precision but just general view of the system.
-# Setting this variable to 1000 will simulate millisecond precision.
+# small number value are used for timings, thus this multiplier is used to scale things up
 TIME_MULTIPLIER = 10
+
 
 class RadioEventDirection:
     Incoming = 0
@@ -56,7 +54,6 @@ class RadioAggregator:
         return f"RadioAggregator: {self.events} {self.states} {self._name}"
 
 
-# TODO: there are limitations in that all numbers are in seconds(assumed amounts). We should multiply everything by 1000 to simulate milliseconds, or at least 10-100
 class Time:
     def __init__(self):
         self.reset()
@@ -69,13 +66,10 @@ class Time:
 
     def reset(self):
         # TODO nonzero to simplify the example as we don't need to check against zero
-        self._curr_time = 1
+        self._curr_time = random.randint(12, 567)
 
     def __repr__(self):
         return f"Time: {self._curr_time}"
-
-
-time = Time()
 
 
 class IncomingSignal:
@@ -95,49 +89,56 @@ class Signal:
         self,
         name: str,
         period: int,
+        time: Time,
         dest_node=None,
         src_node=None,
         batch: bool = False,
     ):
-        self._first_emit = True
+        self._can_be_calibrated = True
+        self._threshold = period
+        self._time = time
         self._src_node = src_node
         self._name = name
         self._period = period
         self._dest_node = dest_node
         self._batch = batch
 
+        self._emit_count = 0
+        # Hacky solution towards misaligning the signals initially.
         # signal might not be initiated immediately, so immitate some delay to misalign
         self._emit_time = time.current_time() + random.randint(
-            MIN_SIGNAL_TS, MAX_SIGNAL_TS
+            MIN_INITIAL_SIGNAL_TS, MAX_INITIAL_SIGNAL_TS
         )
 
     def get_dest_node_name(self) -> str:
         return self._dest_node.get_name()
 
-    def post_emit(self, time: int, gcd: int, premature: bool) -> None:
+    def post_emit(self, time: int) -> None:
+        self._emit_count += 1
         assert time <= self._emit_time
 
-        if self._first_emit and premature:
-            self._emit_time = time + gcd
-            self._first_emit = False
-        else:
-            self._emit_time = time + self._period
+        self._emit_time = time + self._period
 
     def can_emit_at(self, time: int) -> bool:
         return self._emit_time == time
 
     def convert_to_incoming(self) -> IncomingSignal:
         assert self._src_node is not None
-        return IncomingSignal(self._name, time.current_time(), self._src_node)
+        return IncomingSignal(self._name, self._time.current_time(), self._src_node)
 
-    def __repr__(self):
-        return (
-            f"Signal: {self._name}, {self._period}, {self._emit_time} {self._dest_node}"
-        )
+    def __repr__(self):        
+        return f"""
+        Signal: {self._name}
+        period: {self._period}
+        emit_time: {self._emit_time}
+        dest_node: {self._dest_node}
+        emit_count: {self._emit_count}
+        """
 
 
 class Device:
     def __init__(self, name: str, local_batching: bool, recv_batching: bool):
+        self._time = Time()
         self._name = name
         self._radio: typing.Optional[Radio] = None
         self._outgoing_signals: typing.Optional[list[Signal]] = None
@@ -163,8 +164,8 @@ class Device:
 
         self._peer_last_received[signal._src_node._name] = True
 
-    def emit(self, signal: Signal, gcd: int, premature: bool) -> None:
-        signal.post_emit(time.current_time(), gcd, premature)
+    def emit(self, signal: Signal, multiplier: int, premature: bool) -> None:
+        signal.post_emit(self._time.current_time())
 
         assert self._radio is not None
         self._radio.emit(signal)
@@ -172,52 +173,46 @@ class Device:
         self._peer_last_received[signal.get_dest_node_name()] = False
 
     def update(self) -> None:
+        self._time.advance_time()
         if self._outgoing_signals is None:
             return
 
         assert self._radio
-        curr_time = time.current_time()
-        gcd = min([signal._period for signal in self._outgoing_signals])
+        curr_time = self._time.current_time()
+        multiplier = min([signal._period for signal in self._outgoing_signals])
 
+        signals_emitted = []
         if self._recv_batching:
-            # when receive batching is enabled, it means this is a good opportunity
-            # to emit data towards the peer from which data came. There's a high chance
-            # that peers radio is hot however we're very sure our is hot so it makes sense to use that.
-            # this assumes that the cost of sending data when radio is hot is insignificant
             for signal in self._outgoing_signals:
                 if (
                     signal._dest_node._name in self._peer_last_received
                     and self._peer_last_received[signal._dest_node._name]
                 ):
-                    # TODO: here is the batching on receive logic, however it doesn't work as expected
-                    # the more the the K is increased, the more batches it does, meaning worse battery life.
-                    # The smaller it is, the more it aligns with signal._emit_time and makes no difference
-                    # than a regular local batching
-                    K = 10
-                    if signal._emit_time - K <= curr_time:
-                        signal._emit_time = curr_time
+                    tdelta = signal._emit_time - curr_time
+                    if tdelta <= signal._threshold and tdelta >= 0:
+                        signal._threshold = signal._threshold / 2
+                        self.emit(signal, multiplier, True)                    
+                        signals_emitted.append(signal)
+
 
         if self._local_batching:
-            # the idea behind gcd is to find lowest common interval and align on that.
-            # this assumes that all signals are sharing a common period or else
-            # this doesn't work.
-            # Signal must hold state if it was already emitted or not. Because we are
-            # guaranteed that all periods are multiplier of gcd, we can just wait until
-            # alignment time and simply emit the signal. This will guarantee that this signal
-            # is immediately aligned with all other signals.
-            # Afterwards once the signal is marked as emitted first time, we can proceed as usual
-            # and perform regular emission based on the period of the signal so it will naturally
-            # be emitted on it's gcd*N time.
-            gcd = min([signal._period for signal in self._outgoing_signals])
+            multiplier = min([signal._period for signal in self._outgoing_signals])
+            
             for signal in self._outgoing_signals:
-                if curr_time % gcd == 0 and signal._first_emit:
-                    self.emit(signal, gcd, True)
-
+                if signal in signals_emitted:
+                    continue                                                
+                
+                if curr_time % multiplier == 0:
+                    tdelta = signal._emit_time - curr_time
+                    if tdelta <= signal._threshold and tdelta >= 0:
+                        signal._threshold = signal._threshold / 2
+                        self.emit(signal, multiplier, True)                    
+                        
         # make sure we emit on hard deadline of a signal
         # this is crucial to call at the very end to guarantee emission of events
         for signal in self._outgoing_signals:
             if signal.can_emit_at(curr_time):
-                self.emit(signal, gcd, False)
+                self.emit(signal, multiplier, False)
 
     def __repr__(self):
         return f"Device: {self._name}"
@@ -225,6 +220,7 @@ class Device:
 
 class Network:  #
     def __init__(self, latency: tuple[int, int]):
+        self._time = Time()
         assert latency[0] < latency[1]
 
         self._latency = latency
@@ -243,12 +239,16 @@ class Network:  #
         lat = np.random.randint(self._latency[0], self._latency[1] + 1)
 
         self.ingress_queue.append(
-            (int(time.current_time() + lat), (dest_node, signal.convert_to_incoming()))
+            (
+                int(self._time.current_time() + lat),
+                (dest_node, signal.convert_to_incoming()),
+            )
         )
 
     def update(self) -> None:
+        self._time.advance_time()
         for t, (dest_node, signal) in self.ingress_queue.copy():
-            if t == time.current_time():
+            if t == self._time.current_time():
                 assert dest_node._radio
                 # TODO: can this be simulated nicer?
                 dest_node._radio.receive(signal)
@@ -273,24 +273,32 @@ class Radio:
         self._state_change_countdown = cooldown
         self._node = node
         self._aggregator = aggregator
-        self._aggregator.add_radio_state(self._state, time.current_time())
+        self._aggregator.add_radio_state(self._state, self._node._time.current_time())
 
     def _set_to_high(self) -> None:
         self._state = RadioState.High
-        self._aggregator.add_radio_state(self._state, time.current_time())
+        self._aggregator.add_radio_state(self._state, self._node._time.current_time())
         self._state_change_countdown = self._cooldown
 
     def receive(self, signal: IncomingSignal) -> None:
         self._set_to_high()
         self._aggregator.add_event(
-            RadioEvent(time.current_time(), signal._name, RadioEventDirection.Incoming)
+            RadioEvent(
+                self._node._time.current_time(),
+                signal._name,
+                RadioEventDirection.Incoming,
+            )
         )
         self._node.receive(signal)
 
     def emit(self, signal: Signal) -> None:
         self._set_to_high()
         self._aggregator.add_event(
-            RadioEvent(time.current_time(), signal._name, RadioEventDirection.Outgoing)
+            RadioEvent(
+                self._node._time.current_time(),
+                signal._name,
+                RadioEventDirection.Outgoing,
+            )
         )
 
         self._network.send(signal._dest_node, signal)
@@ -301,7 +309,9 @@ class Radio:
                 self._state_change_countdown -= 1
             else:
                 self._state = RadioState.Low
-                self._aggregator.add_radio_state(self._state, time.current_time())
+                self._aggregator.add_radio_state(
+                    self._state, self._node._time.current_time()
+                )
 
     def __repr__(self):
         return f"Radio: {self._state}, {self._state_change_countdown}"
@@ -329,8 +339,6 @@ class StateMachine:
         self._radios.append(radio)
 
     def update(self) -> None:
-        time.advance_time()
-
         self._network.update()
 
         for node in self._nodes:
@@ -340,12 +348,10 @@ class StateMachine:
             radio.update()
 
         self._network.update()
-        
 
     # return all of the state
     def state(self) -> StateInfo:
         return {
-            "time": time.current_time(),
             "nodes": self._nodes,
             "radios": self._radios,
         }
@@ -441,7 +447,6 @@ def visualize(aggregators: typing.List[RadioAggregator]):
 
 
 def _reset():
-    time.reset()
     np.random.seed(RAND_SEED)
     random.seed(RAND_SEED)
 
@@ -459,7 +464,7 @@ def run(
     network_lat_min *= TIME_MULTIPLIER
     network_lat_max *= TIME_MULTIPLIER
     radio_cooldown *= TIME_MULTIPLIER
-    
+
     _reset()
     network = Network((network_lat_min, network_lat_max))  # ping latency
 
@@ -532,6 +537,7 @@ def run(
                     dest_node=dst_node,
                     batch=batch,
                     src_node=src_node,
+                    time=src_node._time,
                 )
             )
 
@@ -590,27 +596,29 @@ def run(
 
     if radio_aggregator_a.events:
         print(
-            f"Total radio time for device A: {get_radio_high_time(radio_aggregator_a)} or {get_radio_high_time(radio_aggregator_a) /  time.current_time():.2%} of total time"
+            f"Total radio time for device A: {get_radio_high_time(radio_aggregator_a)} or {get_radio_high_time(radio_aggregator_a) /  1:.2%} of total time"
         )
+        print(f"Device A signal counts: ", [x._emit_count for x in node_a._outgoing_signals])
     if radio_aggregator_b.events:
         print(
-            f"Total radio time for device B: {get_radio_high_time(radio_aggregator_b)} or {get_radio_high_time(radio_aggregator_b) /  time.current_time():.2%} of total time"
+            f"Total radio time for device B: {get_radio_high_time(radio_aggregator_b)} or {get_radio_high_time(radio_aggregator_b) /  1:.2%} of total time"
         )
+        print(f"Device B signal counts: ", [x._emit_count for x in node_b._outgoing_signals])
     if radio_aggregator_c.events:
         print(
-            f"Total radio time for device C: {get_radio_high_time(radio_aggregator_c)} or {get_radio_high_time(radio_aggregator_c) /  time.current_time():.2%} of total time"
+            f"Total radio time for device C: {get_radio_high_time(radio_aggregator_c)} or {get_radio_high_time(radio_aggregator_c) /  1:.2%} of total time"
         )
     if radio_aggregator_d.events:
         print(
-            f"Total radio time for device D: {get_radio_high_time(radio_aggregator_d)} or {get_radio_high_time(radio_aggregator_d) /  time.current_time():.2%} of total time"
+            f"Total radio time for device D: {get_radio_high_time(radio_aggregator_d)} or {get_radio_high_time(radio_aggregator_d) /  1:.2%} of total time"
         )
     if radio_aggregator_e.events:
         print(
-            f"Total radio time for device E: {get_radio_high_time(radio_aggregator_e)} or {get_radio_high_time(radio_aggregator_e) /  time.current_time():.2%} of total time"
+            f"Total radio time for device E: {get_radio_high_time(radio_aggregator_e)} or {get_radio_high_time(radio_aggregator_e) /  1:.2%} of total time"
         )
     if radio_aggregator_f.events:
         print(
-            f"Total radio time for device F: {get_radio_high_time(radio_aggregator_f)} or {get_radio_high_time(radio_aggregator_f) /  time.current_time():.2%} of total time"
+            f"Total radio time for device F: {get_radio_high_time(radio_aggregator_f)} or {get_radio_high_time(radio_aggregator_f) /  1:.2%} of total time"
         )
 
     visualize(
