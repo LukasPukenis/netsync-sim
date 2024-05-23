@@ -9,8 +9,10 @@ import numpy as np
 RAND_SEED = 42
 
 # TODO move outside to interactive sliders
-MIN_INITIAL_SIGNAL_TS = 0
-MAX_INITIAL_SIGNAL_TS = 4000
+MIN_INITIAL_TIME = 0
+MAX_INITIAL_TIME = 4000
+MIN_INITIAL_SIGNAL_TIME = 50
+MAX_INITIAL_SIGNAL_TIME = 500
 # TODO: constants above could go into the notebook
 
 # small number value are used for timings, thus this multiplier is used to scale things up
@@ -65,8 +67,7 @@ class Time:
         self._curr_time += 1
 
     def reset(self):
-        # TODO nonzero to simplify the example as we don't need to check against zero
-        self._curr_time = random.randint(12, 567)
+        self._curr_time = random.randint(MIN_INITIAL_TIME, MAX_INITIAL_TIME)
 
     def __repr__(self):
         return f"Time: {self._curr_time}"
@@ -84,7 +85,7 @@ class IncomingSignal:
         )
 
 
-class Signal:
+class OutgoingSignal:
     def __init__(
         self,
         name: str,
@@ -104,10 +105,8 @@ class Signal:
         self._batch = batch
 
         self._emit_count = 0
-        # Hacky solution towards misaligning the signals initially.
-        # signal might not be initiated immediately, so immitate some delay to misalign
         self._emit_time = time.current_time() + random.randint(
-            MIN_INITIAL_SIGNAL_TS, MAX_INITIAL_SIGNAL_TS
+            MIN_INITIAL_SIGNAL_TIME, MAX_INITIAL_SIGNAL_TIME
         )
 
     def get_dest_node_name(self) -> str:
@@ -122,11 +121,13 @@ class Signal:
     def can_emit_at(self, time: int) -> bool:
         return self._emit_time == time
 
-    def convert_to_incoming(self) -> IncomingSignal:
+    def convert_to_incoming(self, latency: int) -> IncomingSignal:
         assert self._src_node is not None
-        return IncomingSignal(self._name, self._time.current_time(), self._src_node)
+        return IncomingSignal(
+            self._name, self._time.current_time() + latency, self._src_node
+        )
 
-    def __repr__(self):        
+    def __repr__(self):
         return f"""
         Signal: {self._name}
         period: {self._period}
@@ -141,7 +142,7 @@ class Device:
         self._time = Time()
         self._name = name
         self._radio: typing.Optional[Radio] = None
-        self._outgoing_signals: typing.Optional[list[Signal]] = None
+        self._outgoing_signals: typing.Optional[list[OutgoingSignal]] = None
 
         self._local_batching = local_batching
         self._recv_batching = recv_batching
@@ -156,7 +157,7 @@ class Device:
 
         self._radio = radio
 
-    def add_outgoing_signals(self, signals: list[Signal]) -> None:
+    def add_outgoing_signals(self, signals: list[OutgoingSignal]) -> None:
         self._outgoing_signals = signals
 
     def receive(self, signal: IncomingSignal) -> None:
@@ -164,7 +165,7 @@ class Device:
 
         self._peer_last_received[signal._src_node._name] = True
 
-    def emit(self, signal: Signal, multiplier: int, premature: bool) -> None:
+    def emit(self, signal: OutgoingSignal, multiplier: int, premature: bool) -> None:
         signal.post_emit(self._time.current_time())
 
         assert self._radio is not None
@@ -182,32 +183,33 @@ class Device:
         multiplier = min([signal._period for signal in self._outgoing_signals])
 
         signals_emitted = []
-        if self._recv_batching:
+        if self._recv_batching and False:
             for signal in self._outgoing_signals:
                 if (
                     signal._dest_node._name in self._peer_last_received
                     and self._peer_last_received[signal._dest_node._name]
                 ):
                     tdelta = signal._emit_time - curr_time
-                    if tdelta <= signal._threshold and tdelta >= 0:
-                        signal._threshold = signal._threshold / 2
-                        self.emit(signal, multiplier, True)                    
+                    if tdelta <= signal._period / 2 and tdelta >= 0:
+                        # signal._threshold = signal._threshold / 2
+                        self.emit(signal, multiplier, True)
                         signals_emitted.append(signal)
-
 
         if self._local_batching:
             multiplier = min([signal._period for signal in self._outgoing_signals])
-            
+
             for signal in self._outgoing_signals:
                 if signal in signals_emitted:
-                    continue                                                
-                
+                    continue
+
                 if curr_time % multiplier == 0:
                     tdelta = signal._emit_time - curr_time
-                    if tdelta <= signal._threshold and tdelta >= 0:
-                        signal._threshold = signal._threshold / 2
-                        self.emit(signal, multiplier, True)                    
-                        
+                    assert tdelta >= 0
+                    # signal._threshold = signal._period / 2
+                    if tdelta <= signal._threshold:
+                        signal._threshold = signal._threshold * 0.91
+                        self.emit(signal, multiplier, True)
+
         # make sure we emit on hard deadline of a signal
         # this is crucial to call at the very end to guarantee emission of events
         for signal in self._outgoing_signals:
@@ -235,13 +237,13 @@ class Network:  #
 
         self._latency = latency
 
-    def send(self, dest_node: Device, signal: Signal) -> None:
+    def send(self, dest_node: Device, signal: OutgoingSignal) -> None:
         lat = np.random.randint(self._latency[0], self._latency[1] + 1)
 
         self.ingress_queue.append(
             (
                 int(self._time.current_time() + lat),
-                (dest_node, signal.convert_to_incoming()),
+                (dest_node, signal.convert_to_incoming(lat)),
             )
         )
 
@@ -291,7 +293,7 @@ class Radio:
         )
         self._node.receive(signal)
 
-    def emit(self, signal: Signal) -> None:
+    def emit(self, signal: OutgoingSignal) -> None:
         self._set_to_high()
         self._aggregator.add_event(
             RadioEvent(
@@ -425,6 +427,9 @@ def visualize(aggregators: typing.List[RadioAggregator]):
             marker="v",
         )
 
+        ax.set_ylim(ymin=0)
+        ax.set_xlim(xmin=0)
+
         # Plot RadioStates
         state_times = [time for time, _ in states]
         state_values = [
@@ -506,7 +511,7 @@ def run(
         else:
             raise ValueError(f"Unknown src node: {node_name}")
 
-        signals_to_add: typing.List[Signal] = []
+        signals_to_add: typing.List[OutgoingSignal] = []
         for data in signals[node_name]:
             name = data["name"]
             period = int(data["period"])
@@ -531,7 +536,7 @@ def run(
                 raise ValueError(f"Unknown dst node: {node_name}")
 
             signals_to_add.append(
-                Signal(
+                OutgoingSignal(
                     name,
                     period=period * TIME_MULTIPLIER,
                     dest_node=dst_node,
@@ -598,12 +603,18 @@ def run(
         print(
             f"Total radio time for device A: {get_radio_high_time(radio_aggregator_a)} or {get_radio_high_time(radio_aggregator_a) /  1:.2%} of total time"
         )
-        print(f"Device A signal counts: ", [x._emit_count for x in node_a._outgoing_signals])
+        print(
+            f"Device A signal counts: ",
+            [x._emit_count for x in node_a._outgoing_signals],
+        )
     if radio_aggregator_b.events:
         print(
             f"Total radio time for device B: {get_radio_high_time(radio_aggregator_b)} or {get_radio_high_time(radio_aggregator_b) /  1:.2%} of total time"
         )
-        print(f"Device B signal counts: ", [x._emit_count for x in node_b._outgoing_signals])
+        print(
+            f"Device B signal counts: ",
+            [x._emit_count for x in node_b._outgoing_signals],
+        )
     if radio_aggregator_c.events:
         print(
             f"Total radio time for device C: {get_radio_high_time(radio_aggregator_c)} or {get_radio_high_time(radio_aggregator_c) /  1:.2%} of total time"
