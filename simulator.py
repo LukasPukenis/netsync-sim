@@ -95,8 +95,7 @@ class OutgoingSignal:
         src_node=None,
         batch: bool = False,
     ):
-        self._can_be_calibrated = True
-        self._threshold = period
+        self._threshold = self._period
         self._time = time
         self._src_node = src_node
         self._name = name
@@ -118,7 +117,7 @@ class OutgoingSignal:
 
         self._emit_time = time + self._period
 
-    def can_emit_at(self, time: int) -> bool:
+    def must_emit_at(self, time: int) -> bool:
         return self._emit_time == time
 
     def convert_to_incoming(self, latency: int) -> IncomingSignal:
@@ -138,16 +137,15 @@ class OutgoingSignal:
 
 
 class Device:
-    def __init__(self, name: str, local_batching: bool, recv_batching: bool):
+    def __init__(self, name: str, batching: bool):
         self._time = Time()
         self._name = name
         self._radio: typing.Optional[Radio] = None
         self._outgoing_signals: typing.Optional[list[OutgoingSignal]] = None
 
-        self._local_batching = local_batching
-        self._recv_batching = recv_batching
+        self._batching = batching
 
-        self._peer_last_received: typing.Dict[str, bool] = {}
+        self._threshold_coef = 1.0
 
     def get_name(self) -> str:
         return self._name
@@ -162,59 +160,52 @@ class Device:
 
     def receive(self, signal: IncomingSignal) -> None:
         assert self._radio is not None
+        self._treshold = 1.0
 
-        self._peer_last_received[signal._src_node._name] = True
-
-    def emit(self, signal: OutgoingSignal, multiplier: int, premature: bool) -> None:
-        signal.post_emit(self._time.current_time())
-
+    def emit(self, signal: OutgoingSignal) -> None:
         assert self._radio is not None
+
+        signal.post_emit(self._time.current_time())
+        self._threshold_coef = 1.0
+
         self._radio.emit(signal)
 
-        self._peer_last_received[signal.get_dest_node_name()] = False
-
     def update(self) -> None:
+        self._threshold_coef = max(self._threshold_coef - 0.01, 0)
+
         self._time.advance_time()
         if self._outgoing_signals is None:
             return
 
+        for signal in self._outgoing_signals:
+            signal._threshold = self._threshold_coef * signal._period
+
         assert self._radio
         curr_time = self._time.current_time()
-        multiplier = min([signal._period for signal in self._outgoing_signals])
 
-        signals_emitted = []
-        if self._recv_batching and False:
+        batched_signals = []
+
+        if self._batching:
             for signal in self._outgoing_signals:
-                if (
-                    signal._dest_node._name in self._peer_last_received
-                    and self._peer_last_received[signal._dest_node._name]
-                ):
-                    tdelta = signal._emit_time - curr_time
-                    if tdelta <= signal._period / 2 and tdelta >= 0:
-                        # signal._threshold = signal._threshold / 2
-                        self.emit(signal, multiplier, True)
-                        signals_emitted.append(signal)
+                tdelta = signal._emit_time - curr_time
+                assert tdelta >= 0
 
-        if self._local_batching:
-            multiplier = min([signal._period for signal in self._outgoing_signals])
+                if tdelta <= signal._threshold:
+                    batched_signals.append(signal)
 
+        batched = len(batched_signals) > 1
+
+        if batched:
+            # lets batch everything there is for best alignment. The additional cost of sending some extra data is minimal
             for signal in self._outgoing_signals:
-                if signal in signals_emitted:
-                    continue
+                self.emit(signal)
 
-                if curr_time % multiplier == 0:
-                    tdelta = signal._emit_time - curr_time
-                    assert tdelta >= 0
-                    # signal._threshold = signal._period / 2
-                    if tdelta <= signal._threshold:
-                        signal._threshold = signal._threshold * 0.91
-                        self.emit(signal, multiplier, True)
-
-        # make sure we emit on hard deadline of a signal
-        # this is crucial to call at the very end to guarantee emission of events
-        for signal in self._outgoing_signals:
-            if signal.can_emit_at(curr_time):
-                self.emit(signal, multiplier, False)
+        else:
+            # make sure we emit on hard deadline of a signal
+            # this is crucial to call at the very end to guarantee emission of events
+            for signal in self._outgoing_signals:
+                if signal.must_emit_at(curr_time):
+                    self.emit(signal)
 
     def __repr__(self):
         return f"Device: {self._name}"
@@ -462,8 +453,7 @@ def run(
     network_lat_min: int,
     network_lat_max: int,
     radio_cooldown: int,
-    local_batching: bool,
-    recv_batching: bool,
+    batching: bool,
 ):
     steps *= TIME_MULTIPLIER
     network_lat_min *= TIME_MULTIPLIER
@@ -480,12 +470,12 @@ def run(
     radio_aggregator_e = RadioAggregator("E")
     radio_aggregator_f = RadioAggregator("F")
 
-    node_a = Device("A", local_batching, recv_batching)
-    node_b = Device("B", local_batching, recv_batching)
-    node_c = Device("C", local_batching, recv_batching)
-    node_d = Device("D", local_batching, recv_batching)
-    node_e = Device("E", local_batching, recv_batching)
-    node_f = Device("F", local_batching, recv_batching)
+    node_a = Device("A", batching)
+    node_b = Device("B", batching)
+    node_c = Device("C", batching)
+    node_d = Device("D", batching)
+    node_e = Device("E", batching)
+    node_f = Device("F", batching)
 
     import json
 
