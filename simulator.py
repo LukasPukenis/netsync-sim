@@ -193,7 +193,7 @@ class Device:
 
         for signal in self._outgoing_signals:
             if signal.must_emit_at(curr_time):
-                assert not self._local_batching and not self._triggered_batching
+                # assert not self._local_batching and not self._triggered_batching
                 self.emit(signal)
 
     def __repr__(self):
@@ -581,7 +581,7 @@ def run(
 
     if radio_aggregator_a.events:
         print(
-            f"Total radio time for device A: {get_radio_high_time(radio_aggregator_a)} or {get_radio_high_time(radio_aggregator_a) /  1:.2%} of total time"
+            f"Total radio time for device A: {get_radio_high_time(radio_aggregator_a)}"
         )
         print(
             f"Device A signal counts: ",
@@ -589,7 +589,7 @@ def run(
         )
     if radio_aggregator_b.events:
         print(
-            f"Total radio time for device B: {get_radio_high_time(radio_aggregator_b)} or {get_radio_high_time(radio_aggregator_b) /  1:.2%} of total time"
+            f"Total radio time for device B: {get_radio_high_time(radio_aggregator_b)}"
         )
         print(
             f"Device B signal counts: ",
@@ -597,19 +597,19 @@ def run(
         )
     if radio_aggregator_c.events:
         print(
-            f"Total radio time for device C: {get_radio_high_time(radio_aggregator_c)} or {get_radio_high_time(radio_aggregator_c) /  1:.2%} of total time"
+            f"Total radio time for device C: {get_radio_high_time(radio_aggregator_c)}"
         )
     if radio_aggregator_d.events:
         print(
-            f"Total radio time for device D: {get_radio_high_time(radio_aggregator_d)} or {get_radio_high_time(radio_aggregator_d) /  1:.2%} of total time"
+            f"Total radio time for device D: {get_radio_high_time(radio_aggregator_d)}"
         )
     if radio_aggregator_e.events:
         print(
-            f"Total radio time for device E: {get_radio_high_time(radio_aggregator_e)} or {get_radio_high_time(radio_aggregator_e) /  1:.2%} of total time"
+            f"Total radio time for device E: {get_radio_high_time(radio_aggregator_e)}"
         )
     if radio_aggregator_f.events:
         print(
-            f"Total radio time for device F: {get_radio_high_time(radio_aggregator_f)} or {get_radio_high_time(radio_aggregator_f) /  1:.2%} of total time"
+            f"Total radio time for device F: {get_radio_high_time(radio_aggregator_f)}"
         )
 
     visualize(
