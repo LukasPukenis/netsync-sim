@@ -1,0 +1,28 @@
+
+{
+    "node_a": [
+        {
+            "name": "A1",
+            "period": 100,
+            "dest_node": "node_b"
+        },
+        {
+            "name": "A2",
+            "period": 200,
+            "dest_node": "node_b"
+        },
+        {
+            "name": "A3",
+            "period": 250,
+            "dest_node": "node_b"
+        },
+        {
+            "name": "A4",
+            "period": 350,
+            "dest_node": "node_b"
+        }
+    ],
+    "node_b": [
+        
+    ]
+}
