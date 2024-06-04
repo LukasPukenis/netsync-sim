@@ -6,14 +6,11 @@ from typing import List, TypedDict
 import matplotlib.pyplot as plt
 import numpy as np
 
-RAND_SEED = 42
+RAND_SEED = 1337
 
 # TODO move outside to interactive sliders
 MIN_INITIAL_TIME = 0
 MAX_INITIAL_TIME = 4000
-MIN_INITIAL_SIGNAL_TIME = 50
-MAX_INITIAL_SIGNAL_TIME = 500
-# TODO: constants above could go into the notebook
 
 # small number value are used for timings, thus this multiplier is used to scale things up
 TIME_MULTIPLIER = 10
@@ -58,31 +55,25 @@ class RadioAggregator:
 
 class Time:
     def __init__(self):
-        self.reset()
+        self._curr_time = 0
 
     def current_time(self) -> int:
         return self._curr_time
 
-    def advance_time(self) -> None:
+    def advance(self) -> None:
         self._curr_time += 1
-
-    def reset(self):
-        self._curr_time = random.randint(MIN_INITIAL_TIME, MAX_INITIAL_TIME)
 
     def __repr__(self):
         return f"Time: {self._curr_time}"
 
 
 class IncomingSignal:
-    def __init__(self, name: str, received_time_ts: int, src_node: "Device"):
+    def __init__(self, name: str, src_node: "Device"):
         self._name = name
-        self._received_time_ts = received_time_ts
         self._src_node = src_node
 
     def __repr__(self):
-        return (
-            f"IncomingSignal: {self._name}, {self._received_time_ts}, {self._src_node}"
-        )
+        return f"IncomingSignal: {self._name}, {self._src_node}"
 
 
 class OutgoingSignal:
@@ -93,7 +84,6 @@ class OutgoingSignal:
         time: Time,
         dest_node=None,
         src_node=None,
-        batch: bool = False,
     ):
         self._time = time
         self._src_node = src_node
@@ -103,8 +93,11 @@ class OutgoingSignal:
         self._dest_node = dest_node
 
         self._emit_count = 0
+
+        # misalign initial signals. This is a cheap way to immitate real world where signals might not start
+        # immediately and also might be added at different times. This serves the simulation right.
         self._emit_time = time.current_time() + random.randint(
-            MIN_INITIAL_SIGNAL_TIME, MAX_INITIAL_SIGNAL_TIME
+            MIN_INITIAL_TIME, MAX_INITIAL_TIME
         )
 
     def get_dest_node_name(self) -> str:
@@ -119,11 +112,9 @@ class OutgoingSignal:
     def must_emit_at(self, time: int) -> bool:
         return self._emit_time == time
 
-    def convert_to_incoming(self, latency: int) -> IncomingSignal:
+    def convert_to_incoming(self) -> IncomingSignal:
         assert self._src_node is not None
-        return IncomingSignal(
-            self._name, self._time.current_time() + latency, self._src_node
-        )
+        return IncomingSignal(self._name, self._src_node)
 
     def __repr__(self):
         return f"""
@@ -136,8 +127,17 @@ class OutgoingSignal:
 
 
 class Device:
-    def __init__(self, name: str, local_batching: bool, triggered_batching: bool):
+    def __init__(
+        self,
+        name: str,
+        local_batching: bool,
+        triggered_batching: bool,
+    ):
         self._time = Time()
+
+        # immitate different clocks between devices
+        # self._time.advance_by(random.randint(MIN_INITIAL_TIME, MAX_INITIAL_TIME))
+
         self._name = name
         self._radio: typing.Optional[Radio] = None
         self._outgoing_signals: typing.Optional[list[OutgoingSignal]] = None
@@ -171,7 +171,7 @@ class Device:
     def update(self) -> None:
         self._recv_triggered = max(0, self._recv_triggered - 1)
 
-        self._time.advance_time()
+        self._time.advance()
         if self._outgoing_signals is None:
             return
 
@@ -223,16 +223,16 @@ class Network:  #
         self.ingress_queue.append(
             (
                 int(self._time.current_time() + lat),
-                (dest_node, signal.convert_to_incoming(lat)),
+                (dest_node, signal.convert_to_incoming()),
             )
         )
 
     def update(self) -> None:
-        self._time.advance_time()
+        self._time.advance()
+
         for t, (dest_node, signal) in self.ingress_queue.copy():
             if t == self._time.current_time():
                 assert dest_node._radio
-                # TODO: can this be simulated nicer?
                 dest_node._radio.receive(signal)
                 self.ingress_queue.remove((t, (dest_node, signal)))
 
@@ -247,37 +247,41 @@ class RadioState:
 
 class Radio:
     def __init__(
-        self, node: Device, aggregator: RadioAggregator, network: Network, cooldown: int
+        self,
+        device: Device,
+        aggregator: RadioAggregator,
+        network: Network,
+        cooldown: int,
     ):
         self._state = RadioState.Low
         self._network = network
         self._cooldown = cooldown
         self._state_change_countdown = cooldown
-        self._node = node
+        self._device = device
         self._aggregator = aggregator
-        self._aggregator.add_radio_state(self._state, self._node._time.current_time())
+        self._aggregator.add_radio_state(self._state, self._device._time.current_time())
 
     def _set_to_high(self) -> None:
         self._state = RadioState.High
-        self._aggregator.add_radio_state(self._state, self._node._time.current_time())
+        self._aggregator.add_radio_state(self._state, self._device._time.current_time())
         self._state_change_countdown = self._cooldown
 
     def receive(self, signal: IncomingSignal) -> None:
         self._set_to_high()
         self._aggregator.add_event(
             RadioEvent(
-                self._node._time.current_time(),
+                self._device._time.current_time(),
                 signal._name,
                 RadioEventDirection.Incoming,
             )
         )
-        self._node.receive(signal)
+        self._device.receive(signal)
 
     def emit(self, signal: OutgoingSignal) -> None:
         self._set_to_high()
         self._aggregator.add_event(
             RadioEvent(
-                self._node._time.current_time(),
+                self._device._time.current_time(),
                 signal._name,
                 RadioEventDirection.Outgoing,
             )
@@ -292,7 +296,7 @@ class Radio:
             else:
                 self._state = RadioState.Low
                 self._aggregator.add_radio_state(
-                    self._state, self._node._time.current_time()
+                    self._state, self._device._time.current_time()
                 )
 
     def __repr__(self):
@@ -520,7 +524,6 @@ def run(
                     name,
                     period=period * TIME_MULTIPLIER,
                     dest_node=dst_node,
-                    batch=batch,
                     src_node=src_node,
                     time=src_node._time,
                 )
